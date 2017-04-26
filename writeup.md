@@ -22,6 +22,8 @@ The goals / steps of this project are the following:
 [image7]: ./output_images/combined_binary_of_marked_road.jpg "Combined Binary of Marked Road"
 [image8]: ./output_images/color_binary_of_marked_road.jpg "Color Binary on Marked Road"
 [image9]: ./output_images/transform_perspective.jpg "Perspective Transform"
+[image10]: ./test_images/test5.jpg "Curved Road"
+[image11]: ./output_images/centroid_search.jpg "Centroid Windows Drawn on Lane"
 [video1]: ./project_video.mp4 "Video"
 
 ## [Rubric](https://review.udacity.com/#!/rubrics/571/view) Points
@@ -79,7 +81,6 @@ dst = np.float32([[300, 720],
                   [300, 0],
                   [1000, 0],
                   [1000, 720]]) 
-
 ```
 This resulted in the following source and destination points:
 
@@ -94,13 +95,16 @@ I verified that my perspective transform was working as expected by drawing the 
 
 ![Transform Perspective][image9]
 
-####4. Describe how (and identify where in your code) you identified lane-line pixels and fit their positions with a polynomial?
+#### 4. Describe how (and identify where in your code) you identified lane-line pixels and fit their positions with a polynomial?
 
-Then I did some other stuff and fit my lane lines with a 2nd order polynomial kinda like this:
+I use the lane-centroid search method to detect lane pixels in order to fit their positions with a 2-degree polynomial curve. If the centroid method successfully detects lane pixels and a polynomial is computed, then I use the computed coefficients to extrapolate the lane in successive frames instead of using the centroid search again.
 
-![alt text][image5]
+The lane centroid search method starts by vertically summing the values in the bottom left and right quadrants of the image. It convolves the result with a 1D array of a predefined length and all the values in this array are 1. This 1D array acts as a window that can slide across the length of the image and the `argmax` of this convolution process returns the position of the lane center. The algorithm repeats this convolution process by moving up the image in predefined increments and records the left and right center lanes in an array. Once all the lane centers are found, the algorithm finds all the pixels that are within a margin surrounding each center of each lane, from the bottom to the top of the image. The image below shows a top-down view of a threshold binary image and the green windows represents the lane pixels the centroid search detected.
 
-####5. Describe how (and identify where in your code) you calculated the radius of curvature of the lane and the position of the vehicle with respect to center.
+![Curved Road][image10]
+![Centroid Windows Drawn on Lane][image11]
+
+#### 5. Describe how (and identify where in your code) you calculated the radius of curvature of the lane and the position of the vehicle with respect to center.
 
 I did this in lines # through # in my code in `my_other_file.py`
 
