@@ -14,7 +14,7 @@ The goals / steps of this project are the following:
 [//]: # (Image References)
 
 [image1]: ./output_images/chessboard_images.jpg "Chessboard Calibration"
-[image2]: ./test_images/test1.jpg "Road Transformed"
+[image2]: ./output_images/vehicle_sign_images.jpg "Road Transformed"
 [image3]: ./examples/binary_combo_example.jpg "Binary Example"
 [image4]: ./examples/warped_straight_lines.jpg "Warp Example"
 [image5]: ./examples/color_fit_lines.jpg "Fit Visual"
@@ -22,28 +22,29 @@ The goals / steps of this project are the following:
 [video1]: ./project_video.mp4 "Video"
 
 ## [Rubric](https://review.udacity.com/#!/rubrics/571/view) Points
-###Here I will consider the rubric points individually and describe how I addressed each point in my implementation.  
+### Here I will consider the rubric points individually and describe how I addressed each point in my implementation.  
 
 ---
-###Writeup / README
+### Writeup / README
 
-####1. Briefly state how you computed the camera matrix and distortion coefficients. Provide an example of a distortion corrected calibration image.
+#### 1. Briefly state how you computed the camera matrix and distortion coefficients. Provide an example of a distortion corrected calibration image.
 
 In order to undistort an image and compute the camera matrix and distortion coefficients as parameters to undistort other images, I used OpenCV's calibrateCamera function. The function requires an array of 3D coordinates that correspond to the location of points in the real world, as well as an array of 2D coordinates that correspond to the location of those points in a 2D image. For the 3D coordinates, I created an array called `objp` that is contains the x, y, z coordinates of each corner of a 9x6 square chessboard starting from (0,0,0) and the going across and down the chessboard. The z coordinate is always 0. Next, I read in 20 images of a black-white chessboard taped to a wall. These images are still distorted. Each image is an input to the OpenCV function that finds the corners within the image. If the corners are detected, then their x, y coordinates are appended to an array called `imgpoints` and a copy of `objp` is appended to `objpoints`. These arrays can be input to `cv2.calibrateCamera()` to compute the calibration and distortion matrices. I use these matrices as input to `cv2.undistort()` throughout the project in order to undistort images. I have included an example of applying the undistort function to correct an image below.
 
 ![alt text][image1]
 
-###Pipeline (single images)
+### Pipeline (single images)
 
-####1. Provide an example of a distortion-corrected image.
-To demonstrate this step, I will describe how I apply the distortion correction to one of the test images like this one:
+#### 1. Provide an example of a distortion-corrected image.
+I applied the distortion-correction to one of the images from the vehicle, where the distortion effect was obvious:
 ![alt text][image2]
-####2. Describe how (and identify where in your code) you used color transforms, gradients or other methods to create a thresholded binary image.  Provide an example of a binary image result.
-I used a combination of color and gradient thresholds to generate a binary image (thresholding steps at lines # through # in `another_file.py`).  Here's an example of my output for this step.  (note: this is not actually from one of the test images)
+
+#### 2. Describe how (and identify where in your code) you used color transforms, gradients or other methods to create a thresholded binary image.  Provide an example of a binary image result.
+To create the threshold binary image, I used three channels: The 'Red' channel from the RGB image, the 'Saturation' channel from the HLS image, and the 'Hue' channel from the HLS image. 
 
 ![alt text][image3]
 
-####3. Describe how (and identify where in your code) you performed a perspective transform and provide an example of a transformed image.
+#### 3. Describe how (and identify where in your code) you performed a perspective transform and provide an example of a transformed image.
 
 The code for my perspective transform includes a function called `warper()`, which appears in lines 1 through 8 in the file `example.py` (output_images/examples/example.py) (or, for example, in the 3rd code cell of the IPython notebook).  The `warper()` function takes as inputs an image (`img`), as well as source (`src`) and destination (`dst`) points.  I chose the hardcode the source and destination points in the following manner:
 
