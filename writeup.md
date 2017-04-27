@@ -204,13 +204,13 @@ Here are 3 pipeline output images from various stages of the video
 
 ####1. Provide a link to your final video output.  Your pipeline should perform reasonably well on the entire project video (wobbly lines are ok but no catastrophic failures that would cause the car to drive off the road!).
 
-Here's a [link to my video result](./project_video.mp4)
+Here's a [link to my video result][video1]
 
 ---
 
-###Discussion
+### Discussion
 
-####1. Briefly discuss any problems / issues you faced in your implementation of this project.  Where will your pipeline likely fail?  What could you do to make it more robust?
+#### 1. Briefly discuss any problems / issues you faced in your implementation of this project.  Where will your pipeline likely fail?  What could you do to make it more robust?
 
-Here I'll talk about the approach I took, what techniques I used, what worked and why, where the pipeline might fail and how I might improve it if I were going to pursue this project further.  
+I created a video that shows only the binary thresholds of each image frame. It shows that sometimes the centroid search detects a center that is not part of the lane. This happens in particular with the dashed lanes, where there are empty spaces in between the dashes. Also, since the algorithm hardcodes the source and destination points of the perspective transform, if there are any sharp turns then the perspective transform will not work well and this will result in poorly fitted lanes. The threshold gradients still tend to pickup marks on the road and this may be detected as a lane pixel, which can also result in a poorly fitted curve. One of the ways I have tried to resolve this is by smoothing over a few frames and also comparing the positions of the lanes over current and previous frames. If there are any wild fluctuations then the code will decide that it was a bad frame. Another thing I could do is use the lane detection algorithms from the first project, in which we use hough lines to fit the best lines to the lane so that I could have dynamic source and destination points that can keep up with curved lines.
 
