@@ -24,7 +24,10 @@ The goals / steps of this project are the following:
 [image9]: ./output_images/transform_perspective.jpg "Perspective Transform"
 [image10]: ./test_images/test5.jpg "Curved Road"
 [image11]: ./output_images/centroid_search.jpg "Centroid Windows Drawn on Lane"
-[video1]: ./project_video.mp4 "Video"
+[image12]: ./output_images/pipeline_output_example1.jpg "Pipeline Output Example 1"
+[image13]: ./output_images/pipeline_output_example2.jpg "Pipeline Output Example 2"
+[image14]: ./output_images/pipeline_output_example3.jpg "Pipeline Output Example 3"
+[video1]: ./video_submission.mp4 "Video"
 
 ## [Rubric](https://review.udacity.com/#!/rubrics/571/view) Points
 ### Here I will consider the rubric points individually and describe how I addressed each point in my implementation.  
@@ -104,16 +107,97 @@ The lane centroid search method starts by vertically summing the values in the b
 ![Curved Road][image10]
 ![Centroid Windows Drawn on Lane][image11]
 
+After I have the warped binary image and the centroid windows, I `and` them together to get an image showing only the pixels of the lanes. If the left and right lane pixels are in `left_lane` and `right_lane` respectively, then we can get the x and y values of these pixels using the following code:
+
+```
+left_lane_inds = left_lane.nonzero()
+right_lane_inds = right_lane.nonzero()
+# Extract left and right lane pixel positions
+leftx = left_lane_inds[1]
+lefty = left_lane_inds[0]
+rightx = right_lane_inds[1]
+righty = right_lane_inds[0]
+```
+
+The program uses the x and y values of the pixels in Numpy's `polyfit()` function to compute the coefficients of a 2-degree curve that best fits the pixel positions. I store each frame's coefficients into an array and then compute the moving average of the coefficients across the 3 most recent frames.
+
+```
+# Fit a second order polynomial to the extracted left and right lane pixels
+# Set this new fit as the current fit
+left_line.current_fit = np.polyfit(lefty, leftx, 2)
+right_line.current_fit = np.polyfit(righty, rightx, 2)
+
+# Add the new poly coeffs to the list of all poly coeffs
+left_line.poly_coeffs.append(left_line.current_fit)
+right_line.poly_coeffs.append(right_line.current_fit)
+
+# Calculate the average poly coeffs over the last n frames
+left_line.best_fit = np.average(np.array(left_line.poly_coeffs[max(0, left_line.d + 1 - n):]), axis=0)
+right_line.best_fit = np.average(np.array(right_line.poly_coeffs[max(0, right_line.d + 1 - n):]), axis=0)
+```
+
+I use this "best" fit to calculate the x values of the curve that fits the two lanes, given a set of predefine y values running from 0 to 719, the height of the image.
+
+```
+# Create a 1D array from 0 to 719
+ploty = np.linspace(0, binary_warped.shape[0]-1, binary_warped.shape[0])
+
+# Use the average poly fit coeffs for further calculations
+left_fit = left_line.best_fit
+right_fit = right_line.best_fit
+
+# Use the fit coeffs to generate the x values of the curve for both lanes 
+left_line.bestx = left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2]
+right_line.bestx = right_fit[0]*ploty**2 + right_fit[1]*ploty + right_fit[2]
+```
+
 #### 5. Describe how (and identify where in your code) you calculated the radius of curvature of the lane and the position of the vehicle with respect to center.
 
-I did this in lines # through # in my code in `my_other_file.py`
+I created a function called `calc_curve` to take in the x and y values of the lane pixels to calculate the radius of the curve. The code is below:
 
-####6. Provide an example image of your result plotted back down onto the road such that the lane area is identified clearly.
+```
+def calc_curve(y_eval, lefty, leftx, righty, rightx):
+    '''
+        Takes a set of points from the right and left lanes and then calculates the curvature
+        of the curve that fits those points.
+    '''
 
-I implemented this step in lines # through # in my code in `yet_another_file.py` in the function `map_lane()`.  Here is an example of my result on a test image:
+    # Define conversions in x and y from pixels space to meters
+    ym_per_pix = 30/720 # meters per pixel in y dimension
+    xm_per_pix = 3.7/700 # meters per pixel in x dimension
+    
+    # Fit new polynomials to x,y in world space
+    left_fit_cr = np.polyfit(lefty*ym_per_pix, leftx*xm_per_pix, 2)
+    right_fit_cr = np.polyfit(righty*ym_per_pix, rightx*xm_per_pix, 2)
+    
+    # Calculate the new radii of curvature
+    left_curverad = ((1 + (2*left_fit_cr[0]*y_eval*ym_per_pix + 
+                           left_fit_cr[1])**2)**1.5) / np.absolute(2*left_fit_cr[0])
+    right_curverad = ((1 + (2*right_fit_cr[0]*y_eval*ym_per_pix + 
+                            right_fit_cr[1])**2)**1.5) / np.absolute(2*right_fit_cr[0])
+    
+    # Now our radius of curvature is in meters
+    return left_curverad, right_curverad
+```
 
-![alt text][image6]
+In order to calculate the vehicle position with respect to the lane center, I used the x values of the left and right lane curves at the bottom of the image to calculate the average between the two. I then subtracted this number from the center of the image, which is 640. Then, I multiply it by a factor to convert the number from pixels to meters. Finally, if the number is negative, I say that the vehicle is to the left of center. Otherwise, it is to the right of center.
 
+```
+# Calculate the point midway between the lanes at the bottom of the image
+midpt = (left_fitx[y_eval] + right_fitx[y_eval])/2
+# Calculate the offset of the midpoint to the center of the image, in meters
+offset = (midpt - 640)*xm_per_pix
+```
+
+#### 6. Provide an example image of your result plotted back down onto the road such that the lane area is identified clearly.
+
+I implemented the pipeline in the function `run_centroid_search_pipeline()`. The pipeline undistorts an image frame from the video and creates a warped treshold binary from it. Then it uses the centroid search method to find the lane pixels. It fits a polynomial to the pixels and uses the coefficients to calculate curves that are fit onto the lanes. A green polygon is filled in between the curves. The algorithm performs an inverse perspective transform of the polygon and overlays it back onto the undistorted image of the road. The coefficients are stored and future iterations will use a moving average over the most recent 3 frames to calculate the "best" fit. If a polynomial curve is successfully generated, then the algorithm uses that fit to extrapolate the lane curves for future frames. The code checks for major shifts in the positions of the lane curves or if the lane pixels are not detected. If a frame results in major shifts or no lane pixels detected, then the previous averaged best fit is used for computing the curve. If over 3 frames consecutively contains these issues, then the code starts the centroid search over and drops all the stored fits so far.
+
+Here are 3 pipeline output images from various stages of the video
+
+![Pipeline Output][image12]
+![Pipeline Output][image13]
+![Pipeline Output][image14]
 ---
 
 ###Pipeline (video)
