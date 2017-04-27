@@ -1,7 +1,7 @@
 
 # coding: utf-8
 
-# In[1]:
+# In[14]:
 
 import numpy as np
 import cv2
@@ -15,7 +15,7 @@ from IPython.display import HTML
 import pandas as pd
 
 
-# In[2]:
+# In[15]:
 
 def calibrate_camera(image_files, nx, ny, draw=False):
     '''
@@ -93,25 +93,20 @@ def region_of_interest(img, vertices):
     
     #returning the image only where mask pixels are nonzero
     masked_image = cv2.bitwise_and(img, mask)
+    
     return masked_image
 
+def draw_lines(img, lines, color=[255, 0, 0], thickness=2):
+    '''
+        This function takes a set of line segment endpoints and draws them on the input image.
+    '''
 
-
-def weighted_img(img, initial_img, α=0.8, β=1., λ=0.):
-    """
-    `img` is the output of the hough_lines(), An image with lines drawn on it.
-    Should be a blank image (all black) with lines drawn on it.
+    for line in lines:
+        for x1,y1,x2,y2 in line:
+            cv2.line(img, (x1, y1), (x2, y2), color, thickness)
     
-    `initial_img` should be the image before any processing.
+    return img
     
-    The result image is computed as follows:
-    
-    initial_img * α + img * β + λ
-    NOTE: initial_img and img must be the same shape!
-    """
-    
-    return cv2.addWeighted(initial_img, α, img, β, λ)
-
 ### Helper Functions for Color and Gradient Tresholding
 def abs_sobel_thresh(input_ch, orient='x', sobel_kernel=3, thresh=(0, 255)):
     '''Takes a 2D single channel image, including grayscale, calculates the Sobel derivative in either the x
@@ -300,12 +295,12 @@ def make_binary_mask(binary_dict):
     # Create the mask layers by using some logical combination of the threshold binaries
     mask_r[((binary_dict['abs_sobel_binaryx_R'] == 1) & (binary_dict['dir_binary_R'] == 1))] = 1  
     mask_g[((binary_dict['ch_thresh_binary_HLS_S'] == 1) & (binary_dict['ch_thresh_binary_HLS_H'] == 1))] = 1
-
-    # Combine the layers using logical operations to output a final threshold mask layer
-    color_binary = np.dstack((mask_r, mask_g, mask_b))*255
-    combined_binary = np.zeros_like(mask_g)
-    combined_binary[((mask_r == 1) | (mask_g == 1)) | (mask_b == 1)] = 1
  
+    # Combine the layers using logical operations to output a final threshold mask layer
+    color_binary = np.dstack((mask_r, mask_g, mask_b))
+    combined_binary = np.zeros_like(mask_r)
+    combined_binary[((mask_r == 1) | (mask_g == 1)) | (mask_b == 1)] = 1
+    
     return color_binary, combined_binary
 
 def transform_perspective(image, src, dst):
@@ -321,7 +316,7 @@ def transform_perspective(image, src, dst):
     
     return result, M, Minv
 
-def process_image(image, mtx, dist, prev_m, prev_minv):
+def process_image(image, mtx, dist, prev_m=None, prev_minv=None):
     '''
         Creates a binary mask of the input image detecting lane edges and transforms it
         to a top-down(i.e. bird's eye) view.
@@ -333,53 +328,53 @@ def process_image(image, mtx, dist, prev_m, prev_minv):
     # Create a dictionary that specifies the threshold operations, 
     # parameters, and which channels they are to be performed on
     input_dict = [{'channel': 'R', 'grad_ops': [{'op': 'abs_sobel_binaryx', 'ksize': 9, 'thresholds': (30, 100)},
-                                                {'op': 'abs_sobel_binaryy', 'ksize': 9, 'thresholds': (30, 100)},
-                                                {'op': 'mag_binary', 'ksize': 9, 'thresholds': (50, 150)},
                                                 {'op': 'dir_binary', 'ksize': 9, 'thresholds': (0.7, 1.3)}]},
-
-                  {'channel': 'gray', 'grad_ops': [{'op': 'abs_sobel_binaryx', 'ksize': 9, 'thresholds': (30, 100)},
-                                                   {'op': 'abs_sobel_binaryy', 'ksize': 9, 'thresholds': (30, 200)},  
-                                                   {'op': 'mag_binary', 'ksize': 9, 'thresholds': (50, 150)},
-                                                   {'op': 'dir_binary', 'ksize': 9, 'thresholds': (0.7, 1.3)}]},
-                    
+             
                   {'channel': 'HLS_S', 'grad_ops': [{'op': 'ch_thresh_binary', 'thresholds': (100, 255)}]},
 
-                  {'channel': 'HLS_H', 'grad_ops': [{'op': 'ch_thresh_binary', 'thresholds': (15, 100)}]},
-                  
-                  {'channel': 'HSV_V', 'grad_ops': [{'op': 'ch_thresh_binary', 'thresholds': (210, 255)}]}]
+                  {'channel': 'HLS_H', 'grad_ops': [{'op': 'ch_thresh_binary', 'thresholds': (15, 100)}]}]
+    
     # Apply these operations to the image to get a binary mask
     binary_dict = make_thresh_binaries(undist, input_dict)
     color_binary, combined_binary = make_binary_mask(binary_dict)
     # Specify the region in front of the vehicle that we are interested in
     imshape = combined_binary.shape  
     y_max = 450 # Assume a max value of y for the top edge of the polygon
+    x_offset = 45 # The number of pixels to the left and right of the horizontal middle of the image
     # Apply an image mask on the region of interest
     # Setup the vertices of the polygon that defines the region of interest
     vertices = np.array([[(0,imshape[0]),(imshape[1]/2-80, y_max),
                 (imshape[1]/2+80, y_max), (imshape[1],imshape[0])]], dtype=np.int32)
     masked_binary = region_of_interest(combined_binary*255, vertices)
     
-#     plt.figure(figsize=(20, 9))
+#     plt.figure(figsize=(10, 5))
 #     plt.imshow(combined_binary, cmap='gray')
 #     plt.title('Combined Binary')
+# #     plt.title('Ch. Threshold on HLS Sat. and Hue Chs')
     
-#     plt.figure(figsize=(20, 9))
+#     plt.figure(figsize=(10, 5))
 #     plt.imshow(color_binary)
 #     plt.title('Color Binary')
-    
-#     plt.figure(figsize=(20, 9))
-#     plt.imshow(masked_binary, cmap='gray')
-#     plt.title('Masked Binary')
 
     # Reshape the endpoints of the left and right lane lines into a source matrix for the perspective transform
-    src = np.float32([[0, imshape[0]],
-                      [imshape[1]/2-80, y_max],
-                      [imshape[1]/2+80, y_max], 
-                      [imshape[1], imshape[0]]])
-    dst = np.float32([[300, 700],
+#     src = np.float32([[0, imshape[0]],
+#                       [imshape[1]/2-80, y_max],
+#                       [imshape[1]/2+80, y_max], 
+#                       [imshape[1], imshape[0]]])
+#     dst = np.float32([[300, 700],
+#                       [300, 0],
+#                       [1000, 0],
+#                       [1000, 700]])    
+
+    src = np.float32([[210, imshape[0]],
+                      [imshape[1]/2-x_offset, y_max],
+                      [imshape[1]/2+x_offset, y_max], 
+                      [1100, imshape[0]]])
+    dst = np.float32([[300, 720],
                       [300, 0],
                       [1000, 0],
-                      [1000, 700]])    
+                      [1000, 720]]) 
+
     # Transform the masked binary into a top-down view
     binary_warped, M, Minv = transform_perspective(masked_binary, src, dst)
     nonzeros = binary_warped.nonzero()
@@ -417,11 +412,12 @@ def calc_curve(y_eval, lefty, leftx, righty, rightx):
                            left_fit_cr[1])**2)**1.5) / np.absolute(2*left_fit_cr[0])
     right_curverad = ((1 + (2*right_fit_cr[0]*y_eval*ym_per_pix + 
                             right_fit_cr[1])**2)**1.5) / np.absolute(2*right_fit_cr[0])
+    
     # Now our radius of curvature is in meters
     return left_curverad, right_curverad
 
 
-# In[4]:
+# In[16]:
 
 def window_mask(width, height, img_ref, center, level):
     output = np.zeros_like(img_ref)
@@ -470,7 +466,7 @@ def find_lane_centroids(image, window_width, window_height, margin):
         r_center = np.argmax(conv_signal[r_min_index:r_max_index])+r_min_index-offset
         # Add what we found for that layer
         window_centroids.append((l_center,r_center))
-
+    
     # If we found any window centers
     if len(window_centroids) > 0:
         # Points used to draw all the left and right windows
@@ -485,15 +481,24 @@ def find_lane_centroids(image, window_width, window_height, margin):
             # Add graphic points from window mask here to total pixels found 
             l_points[(l_points == 255) | ((l_mask == 1))] = 255
             r_points[(r_points == 255) | ((r_mask == 1))] = 255
-      
+
+        # Draw the results
+        template = np.array(r_points+l_points,np.uint8) # add both left and right window pixels together
+        zero_channel = np.zeros_like(template) # create a zero color channel
+        template = np.array(cv2.merge((zero_channel,template,zero_channel)),np.uint8) # make window pixels green
+        # making the original road pixels 3 color channels
+        warpage = np.array(cv2.merge((image,image,image)),np.uint8) 
+        # overlay the orignal road image with window results
+        output = cv2.addWeighted(template, 1, warpage, .8, 0.0) 
+            
         # Get the positions of the left and right lane pixels
         left_lane = cv2.bitwise_and(image, l_points)
         right_lane = cv2.bitwise_and(image, r_points)
 
-    return left_lane, right_lane
+    return left_lane, right_lane, output
 
 
-# In[5]:
+# In[17]:
 
 # Define a class to receive the characteristics of each line detection
 class Line():
@@ -524,7 +529,7 @@ class Line():
         self.ally = None
         # The number of high-confidence lane detections we have observed
         self.d = 0
-        # flag to determine whether to not use the current calculated line
+        # Flag to determine whether to not use the current calculated line
         self.skip = False
 
 # Define a class to keep track of frame counts and lost frames
@@ -548,10 +553,12 @@ class Frame():
         self.prev_minv = None
         # Flag set to True if we want to ignore the fits generated for this frame
         self.skip = False
+        # An record of images from the video
+        self.images = []
     
 
 
-# In[16]:
+# In[24]:
 
 ## This pipeline using the centroid search method
 
@@ -573,7 +580,7 @@ def run_centroid_search_pipeline(image):
     left_line.skip = False
     right_line.skip = False
     ploty = np.linspace(0, binary_warped.shape[0]-1, binary_warped.shape[0])
-    y_eval = np.max(ploty)
+    y_eval = int(np.max(ploty))
     left_line.prev_bestx = left_line.bestx
     right_line.prev_bestx = right_line.bestx
     left_line.prev_best_fit = left_line.best_fit
@@ -582,7 +589,7 @@ def run_centroid_search_pipeline(image):
     
     # Search for lanes using sliding windows if neither left or right lanes were detected from last frame
     if not(left_line.detected and right_line.detected):
-        left_lane, right_lane = find_lane_centroids(binary_warped, window_width, window_height, margin)
+        left_lane, right_lane, output = find_lane_centroids(binary_warped, window_width, window_height, margin)
         left_lane_inds = left_lane.nonzero()
         right_lane_inds = right_lane.nonzero()
         # Extract left and right lane pixel positions
@@ -782,7 +789,7 @@ def run_centroid_search_pipeline(image):
     return result
 
 
-# In[3]:
+# In[19]:
 
 nx = 9    # The number of inside corners in x
 ny = 6    # The number of inside corners in y
@@ -792,7 +799,30 @@ image_files = glob.glob('camera_cal/calibration*.jpg')
 mtx, dist = calibrate_camera(image_files, nx, ny, draw=False)
 
 
-# In[4]:
+# In[25]:
+
+n = 3    # The number of frames to average the fit coeffs
+max_lost = 3    # The most frames where the lane detection is lost before a new search begins
+# Set the width of the windows +/- margin window settings
+window_width = 50 
+window_height = 80 # Break image into 9 vertical layers since image height is 720
+margin = 60 # How much to slide left and right for searching
+video = 'road'
+# Instantiate the lane objects
+left_line = Line(n)
+right_line = Line(n)
+frame = Frame()
+
+if video == 'road':
+    road_output = 'video_submission.mp4'
+else:
+    road_output = 'binary_test.mp4'
+clip1 = VideoFileClip("project_video.mp4", audio=False)
+road_clip = clip1.fl_image(run_centroid_search_pipeline)
+get_ipython().magic('time road_clip.write_videofile(road_output, audio=False, verbose=0)')
+
+
+# In[ ]:
 
 # Show that the calibration works by undistorting a chessboard image
 image = mpimg.imread('camera_cal/calibration5.jpg')
@@ -804,7 +834,7 @@ ax2.set_title('Undistorted Image', fontsize=25)
 plt.show()
 
 
-# In[5]:
+# In[ ]:
 
 # Demonstrate the calibration works by undistorting an image from the vehicle
 image = mpimg.imread('test_images/signs_vehicles_xygrad.jpg')
@@ -816,28 +846,87 @@ ax2.set_title('Undistorted Image', fontsize=25)
 plt.show()
 
 
-# In[17]:
+# In[ ]:
 
-n = 3    # The number of frames to average the fit coeffs
-max_lost = 3    # The most frames where the lane detection is lost before a new search begins
-# Set the width of the windows +/- margin
-# window settings
+image = cv2.imread('test_images/marks_on_road_example.jpg')
+image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+plt.figure(figsize=(10,5))
+plt.imshow(image)
+binary_warped, undist, M, Minv = process_image(image, mtx, dist, prev_m=None, prev_minv=None)
+plt.show()
+
+
+# In[ ]:
+
+image = cv2.imread('test_images/color-shadow-example.jpg')
+image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+plt.figure(figsize=(10,5))
+plt.imshow(image)
+binary_warped, undist, M, Minv = process_image(image, mtx, dist, prev_m=None, prev_minv=None)
+plt.show()
+
+
+# In[ ]:
+
+## Draw lines across the lanes of an image from the vehicle and test the perspective transform
+image = cv2.imread('test_images/straight_lines1.jpg')
+image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+imshape = image.shape
+
+# Set the endpoint coordinates of the lines that go through the lanes
+y_max = 450
+x_offset = 45
+ext_lines = np.array([[[210, imshape[0], imshape[1]/2-x_offset, y_max],
+                       [imshape[1]/2-x_offset, y_max, imshape[1]/2+x_offset, y_max],
+                       [imshape[1]/2+x_offset, y_max, 1100, imshape[0]]]], dtype=np.int32)
+final_image = draw_lines(image, ext_lines)
+
+
+# Set the source and destination points for the transform. The source endpoints are the same as those of the 
+# lines drawn through the lanes.
+src = np.float32([[210, imshape[0]],
+                  [imshape[1]/2-x_offset, y_max],
+                  [imshape[1]/2+x_offset, y_max], 
+                  [1100, imshape[0]]])
+dst = np.float32([[300, 720],
+                  [300, 0],
+                  [1000, 0],
+                  [1000, 720]]) 
+
+# Do the perspective transform and show the result
+img_size = (image.shape[1], image.shape[0])
+M = cv2.getPerspectiveTransform(src, dst)
+Minv = cv2.getPerspectiveTransform(dst, src)
+result = cv2.warpPerspective(image, M, img_size, flags=cv2.INTER_LINEAR)    
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(24,9))
+ax1.imshow(final_image)
+ax1.set_title('Lines Drawn on Lanes', fontsize=20)
+ax2.imshow(result)
+ax2.set_title('Perspective Transform to Top-Down View', fontsize=20)
+plt.show()
+
+
+# In[ ]:
+
+# Set the width of the windows +/- margin window settings
 window_width = 50 
 window_height = 80 # Break image into 9 vertical layers since image height is 720
 margin = 60 # How much to slide left and right for searching
-video = 'road'
-# Instantiate the lane objects
-left_line = Line(n)
-right_line = Line(n)
-frame = Frame()
 
-if video == 'road':
-    road_output = 'road_test.mp4'
-else:
-    road_output = 'binary_test.mp4'
-clip1 = VideoFileClip("project_video.mp4", audio=False)
-road_clip = clip1.fl_image(run_centroid_search_pipeline)
-get_ipython().magic('time road_clip.write_videofile(road_output, audio=False, verbose=0)')
+image = cv2.imread('test_images/test5.jpg')
+image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+plt.figure(figsize=(10,5))
+plt.imshow(image)
+plt.title('Original Image')
+binary_warped, undist, M, Minv = process_image(image, mtx, dist, prev_m=None, prev_minv=None)
+left_lane, right_lane, output = find_lane_centroids(binary_warped, window_width, window_height, margin)
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(24,9))
+ax1.imshow(binary_warped, cmap='gray')
+ax1.set_title('Binary Warp')
+ax2.imshow(output, cmap='gray')
+ax2.set_title('Binary Warp with Centroid Windows')
+
+plt.show()
 
 
 # In[ ]:
