@@ -52,18 +52,18 @@ I will demonstrate the methods I used to create a threshold binary image on the 
 
 ![Marks on Road Example][image3]
 
-To create the threshold binary image, I used three channels: The 'Red' channel from the RGB image, the 'Saturation' channel from the HLS image, and the 'Hue' channel from the HLS image. For the Red channel, I applied an absolute Sobel gradient operation in the X direction, with a kernel of size 9 and threshold values between 30 and 100. I did a logical `and` of this gradient with a directional gradient on the Red channel, of kernel size 9 and threshold values between 0.7 and 1.3. 
+To create the threshold binary image, I used three channels: The 'Red' channel from the RGB image, the 'Saturation' channel from the HLS image, and the 'Hue' channel from the HLS image. For the Red channel, I applied an absolute Sobel gradient operation in the X direction, with a kernel of size 9 and threshold values between 30 and 100. I did a logical `and` of this gradient with a directional gradient on the Red channel, of kernel size 9 and threshold values between 0.7 and 1.3. This can be found in 330 to 335 of p3_submission.py. 
 
-The Sobel operation on the Red channel in the X direction did a good job of finding the white lane lines, however it would also pickup extraneous marks on the road. I found that if I performed a logical `and` of the output of the Sobel operation with that of the directional gradient, I could remove some of the extraneous marks. See the following for an example. The top image shows the threshold binary for a Sobel operation in the X direction on the Red channel alone. The bottom image shows the output of that operation 'anded' with the directional gradient. 
+The Sobel operation on the Red channel in the X direction did a good job of finding the white lane lines, however it would also pickup extraneous marks on the road. I found that if I performed a logical `and` of the output of the Sobel operation with that of the directional gradient, I could remove some of the extraneous marks. See the following for an example. The top image shows the threshold binary for a Sobel operation in the X direction on the Red channel alone. The bottom image shows the output of that operation 'anded' with the directional gradient. This can be found in line 296 of p3_submission.py. 
 
 ![Absolute Sobel X on Red][image4]
 ![Absolute Sobel X AND Directional Binary on Red][image5]
 
-Performing a channel threshold on the HLS Saturation and Hue channels can pick up the yellow lane better, as well as fill in parts of the lanes that the operations on the Red channel did not pick up. See the image below for an example.
+Performing a channel threshold on the HLS Saturation and Hue channels can pick up the yellow lane better, as well as fill in parts of the lanes that the operations on the Red channel did not pick up. This can be found in line 297 of p3_submission.py. See the image below for an example.
 
 ![Ch Threshold on HLS S and H Channels][image6]
 
-Finally, I do a logical `or` of the Red gradient output and the HLS threshold output since both complement each other. The Red channel picks up certain white lane portions better and the HLS threshold output picks up yellow lanes better even if the lanes have shadow on them. The top image shows the combined binary output and the bottom image shows the Red channel contribution in red and the HLS channel contribution in green.
+Finally, I do a logical `or` of the Red gradient output and the HLS threshold output since both complement each other. The Red channel picks up certain white lane portions better and the HLS threshold output picks up yellow lanes better even if the lanes have shadow on them. I do this in line 302 of p3_submission.py. The top image shows the combined binary output and the bottom image shows the Red channel contribution in red and the HLS channel contribution in green. 
 
 ![Combined Binary][image7]
 ![Color Binary][image8]
@@ -71,6 +71,8 @@ Finally, I do a logical `or` of the Red gradient output and the HLS threshold ou
 #### 3. Describe how (and identify where in your code) you performed a perspective transform and provide an example of a transformed image.
 
 I used the OpenCV functions `cv2.getPerspectiveTransform()` and `cv2.warpPerspective()` to transform an image from the vehicle to a top-down perspective. In order to do so, I had to specify the x, y coordinates of points from the original image into the x, y coordinates of those points in the transformed image. Originally, I used my code from Project 1 - Lane Finding, to find the endpoint coordinates of two lines going through both lanes, setting those as the source points, and then transforming them into fixed destination points. However, when I performed the transform, the lanes would shift around since the source points were always changing. This made it difficult for the program to keep track of the lane positions. Later, I decided to fix the source points using endpoint coordinates that roughly correspond to the points of the lane closest to the car camera and then to a position in the road about midway down the line-of-sight. This resulted in much more stable perspective transforms.
+
+I created a helper function called `transform_perspective()` to do the transform. This is in lines 306 to 317 of p3_submission.py. When the pipeline is actually run, it calls a function named `process_image()` in which I define the source and destination points and use them as input into `transform_perspective()` in lines 358 to 368 of the same file. 
 
 ```
 y_max = 450    # The y value of where the lane lines end in the distance
@@ -100,14 +102,14 @@ I verified that my perspective transform was working as expected by drawing the 
 
 #### 4. Describe how (and identify where in your code) you identified lane-line pixels and fit their positions with a polynomial?
 
-I use the lane-centroid search method to detect lane pixels in order to fit their positions with a 2-degree polynomial curve. If the centroid method successfully detects lane pixels and a polynomial is computed, then I use the computed coefficients to extrapolate the lane in successive frames instead of using the centroid search again.
+I use the lane-centroid search method to detect lane pixels in order to fit their positions with a 2-degree polynomial curve. If the centroid method successfully detects lane pixels and a polynomial is computed, then I use the computed coefficients to extrapolate the lane in successive frames instead of using the centroid search again. The entire method is defined as a helper function named `find_lane_centroids` from lines 412 to 481 of p3_submission.py.
 
-The lane centroid search method starts by vertically summing the values in the bottom left and right quadrants of the image. It convolves the result with a 1D array of a predefined length and all the values in this array are 1. This 1D array acts as a window that can slide across the length of the image and the `argmax` of this convolution process returns the position of the lane center. The algorithm repeats this convolution process by moving up the image in predefined increments and records the left and right center lanes in an array. Once all the lane centers are found, the algorithm finds all the pixels that are within a margin surrounding each center of each lane, from the bottom to the top of the image. The image below shows a top-down view of a threshold binary image and the green windows represents the lane pixels the centroid search detected.
+The lane centroid search method starts by vertically summing the values in the bottom left and right quadrants of the image. It convolves the result with a 1D array of a predefined length and all the values in this array are 1. This 1D array acts as a window that can slide across the length of the image and the `argmax` of this convolution process returns the position of the lane center (lines 425 to 428). The algorithm repeats this convolution process by moving up the image in predefined increments and records the left and right center lanes in an array (lines 434 to 451). Once all the lane centers are found, the algorithm finds all the pixels that are within a margin surrounding each center of each lane, from the bottom to the top of the image (lines 454 to 466). The image below shows a top-down view of a threshold binary image and the green windows represents the lane pixels the centroid search detected.
 
 ![Curved Road][image10]
 ![Centroid Windows Drawn on Lane][image11]
 
-After I have the warped binary image and the centroid windows, I `and` them together to get an image showing only the pixels of the lanes. If the left and right lane pixels are in `left_lane` and `right_lane` respectively, then we can get the x and y values of these pixels using the following code:
+After I have the warped binary image and the centroid windows, I `and` them together to get an image showing only the pixels of the lanes. If the left and right lane pixels are in `left_lane` and `right_lane` respectively, then we can get the x and y values of these pixels using the following code (lines 576 to 582 or p3_submission.py):
 
 ```
 left_lane_inds = left_lane.nonzero()
@@ -119,7 +121,7 @@ rightx = right_lane_inds[1]
 righty = right_lane_inds[0]
 ```
 
-The program uses the x and y values of the pixels in Numpy's `polyfit()` function to compute the coefficients of a 2-degree curve that best fits the pixel positions. I store each frame's coefficients into an array and then compute the moving average of the coefficients across the 3 most recent frames.
+The program uses the x and y values of the pixels in Numpy's `polyfit()` function to compute the coefficients of a 2-degree curve that best fits the pixel positions. I store each frame's coefficients into an array and then compute the moving average of the coefficients across the 3 most recent frames (lines 615 to 624).
 
 ```
 # Fit a second order polynomial to the extracted left and right lane pixels
@@ -136,7 +138,7 @@ left_line.best_fit = np.average(np.array(left_line.poly_coeffs[max(0, left_line.
 right_line.best_fit = np.average(np.array(right_line.poly_coeffs[max(0, right_line.d + 1 - n):]), axis=0)
 ```
 
-I use this "best" fit to calculate the x values of the curve that fits the two lanes, given a set of predefine y values running from 0 to 719, the height of the image.
+I use this "best" fit to calculate the x values of the curve that fits the two lanes, given a set of predefine y values running from 0 to 719, the height of the image (lines 627 to 632).
 
 ```
 # Create a 1D array from 0 to 719
@@ -153,7 +155,7 @@ right_line.bestx = right_fit[0]*ploty**2 + right_fit[1]*ploty + right_fit[2]
 
 #### 5. Describe how (and identify where in your code) you calculated the radius of curvature of the lane and the position of the vehicle with respect to center.
 
-I created a function called `calc_curve` to take in the x and y values of the lane pixels to calculate the radius of the curve. The code is below:
+I created a function called `calc_curve` to take in the x and y values of the lane pixels to calculate the radius of the curve. The code, taken from lines 381 to 400 of p3_submission.py is below:
 
 ```
 def calc_curve(y_eval, lefty, leftx, righty, rightx):
@@ -180,7 +182,7 @@ def calc_curve(y_eval, lefty, leftx, righty, rightx):
     return left_curverad, right_curverad
 ```
 
-In order to calculate the vehicle position with respect to the lane center, I used the x values of the left and right lane curves at the bottom of the image to calculate the average between the two. I then subtracted this number from the center of the image, which is 640. Then, I multiply it by a factor to convert the number from pixels to meters. Finally, if the number is negative, I say that the vehicle is to the left of center. Otherwise, it is to the right of center.
+In order to calculate the vehicle position with respect to the lane center, I used the x values of the left and right lane curves at the bottom of the image to calculate the average between the two. I then subtracted this number from the center of the image, which is 640. Then, I multiply it by a factor to convert the number from pixels to meters. Finally, if the number is negative, I say that the vehicle is to the left of center. Otherwise, it is to the right of center. The code for this is from lines 684 to 687 of p3_submission.py.
 
 ```
 # Calculate the point midway between the lanes at the bottom of the image
@@ -191,7 +193,7 @@ offset = (midpt - 640)*xm_per_pix
 
 #### 6. Provide an example image of your result plotted back down onto the road such that the lane area is identified clearly.
 
-I implemented the pipeline in the function `run_centroid_search_pipeline()`. The pipeline undistorts an image frame from the video and creates a warped treshold binary from it. Then it uses the centroid search method to find the lane pixels. It fits a polynomial to the pixels and uses the coefficients to calculate curves that are fit onto the lanes. A green polygon is filled in between the curves. The algorithm performs an inverse perspective transform of the polygon and overlays it back onto the undistorted image of the road. The coefficients are stored and future iterations will use a moving average over the most recent 3 frames to calculate the "best" fit. If a polynomial curve is successfully generated, then the algorithm uses that fit to extrapolate the lane curves for future frames. The code checks for major shifts in the positions of the lane curves or if the lane pixels are not detected. If a frame results in major shifts or no lane pixels detected, then the previous averaged best fit is used for computing the curve. If over 3 frames consecutively contains these issues, then the code starts the centroid search over and drops all the stored fits so far.
+I implemented the pipeline in the function `run_centroid_search_pipeline()` from line 548 of p3_submission.py. The pipeline undistorts an image frame from the video and creates a warped treshold binary from it. Then it uses the centroid search method to find the lane pixels. It fits a polynomial to the pixels and uses the coefficients to calculate curves that are fit onto the lanes. A green polygon is filled in between the curves. The algorithm performs an inverse perspective transform of the polygon and overlays it back onto the undistorted image of the road. The coefficients are stored and future iterations will use a moving average over the most recent 3 frames to calculate the "best" fit. If a polynomial curve is successfully generated, then the algorithm uses that fit to extrapolate the lane curves for future frames. The code checks for major shifts in the positions of the lane curves or if the lane pixels are not detected. If a frame results in major shifts or no lane pixels detected, then the previous averaged best fit is used for computing the curve. If over 3 frames consecutively contains these issues, then the code starts the centroid search over and drops all the stored fits so far.
 
 Here are 3 pipeline output images from various stages of the video
 
